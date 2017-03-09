@@ -1215,14 +1215,16 @@ Perl_init_i18nl10n(pTHX_ int printwarn)
 
 #if defined(USE_ENVIRON_ARRAY)
                 {
-                char **e;
-                for (e = environ; *e; e++) {
-                    if (strSTARTS_WITHs(*e, "LC_")
+                    char **e;
+                    for (e = environ; *e; e++) {
+                        if (     strSTARTS_WITHs(*e, "LC_")
                             && ! strSTARTS_WITHs(*e, "LC_ALL=")
                             && (p = strchr(*e, '=')))
-                        PerlIO_printf(Perl_error_log, "\t%.*s = \"%s\",\n",
-                                        (int)(p - *e), *e, p + 1);
-                }
+                        {
+                            PerlIO_printf(Perl_error_log, "\t%.*s = \"%s\",\n",
+                                            (int)(p - *e), *e, p + 1);
+                        }
+                    }
                 }
 #else
                 PerlIO_printf(Perl_error_log,
