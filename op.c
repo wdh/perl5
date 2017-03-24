@@ -10701,7 +10701,7 @@ Perl_ck_method(pTHX_ OP *o)
         return newMETHOP_named(OP_METHOD_NAMED, 0, methsv);
     }
 
-    if (nsplit == 7 && memEQ(method, "SUPER::", nsplit)) { /* $proto->SUPER::method() */
+    if (memEQs(method, nsplit, "SUPER::")) { /* $proto->SUPER::method() */
         op_free(o);
         return newMETHOP_named(OP_METHOD_SUPER, 0, methsv);
     }
@@ -11891,9 +11891,11 @@ Perl_ck_entersub_args_core(pTHX_ OP *entersubop, GV *namegv, SV *protosv)
             op_sibling_splice(parent, first, -1, NULL);
 	op_free(entersubop);
 
-	if (opnum == OP_ENTEREVAL
-	 && GvNAMELEN(namegv)==9 && strnEQ(GvNAME(namegv), "evalbytes", 9))
+	if (   opnum == OP_ENTEREVAL
+	    && memEQs(GvNAME(namegv), GvNAMELEN(namegv), "evalbytes"))
+        {
 	    flags |= OPpEVAL_BYTES <<8;
+        }
 	
 	switch (PL_opargs[opnum] & OA_CLASS_MASK) {
 	case OA_UNOP:
