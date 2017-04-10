@@ -1,5 +1,7 @@
 #!./perl
 
+# XXX Got a msg once about t/tmp already existing, so some test(s) needs to change to random dir name
+
 # We suppose that perl _mostly_ works at this moment, so may use
 # sophisticated testing.
 
