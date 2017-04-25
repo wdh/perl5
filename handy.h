@@ -515,6 +515,9 @@ Returns zero if non-equal, or non-zero if equal.
 #define memENDS_WITHs(s1, l, s2)                                            \
             (   (l) >= sizeof(s2) - 1                                       \
              && memEQ(s1 + (l) - (sizeof(s2) - 1), "" s2 "", sizeof(s2)-1))
+#define memFOO_ENDING_WITHs(s1, l, s2)                                      \
+            (   (l) >= sizeof(s2)                                           \
+             && memEQ(s1 + (l) - (sizeof(s2) - 1), "" s2 "", sizeof(s2)-1))
 
 #define memLT(s1,s2,l) (memcmp(s1,s2,l) < 0)
 #define memLE(s1,s2,l) (memcmp(s1,s2,l) <= 0)
