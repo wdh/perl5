@@ -601,9 +601,7 @@ S_isFF_OVERLONG(const U8 * const s, const STRLEN len)
      * what comes after them doesn't matter.  See tables in utf8.h,
      * utfebcdic.h. */
 
-    return    len >= sizeof(FF_OVERLONG_PREFIX) - 1
-           && UNLIKELY(memEQ(s, FF_OVERLONG_PREFIX,
-                                            sizeof(FF_OVERLONG_PREFIX) - 1));
+    return UNLIKELY(memSTARTS_WITHs(s, len, FF_OVERLONG_PREFIX));
 }
 
 #undef F0_ABOVE_OVERLONG

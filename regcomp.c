@@ -14526,45 +14526,45 @@ S_handle_possible_posix(pTHX_ RExC_state_t *pRExC_state,
                  * Offset 4 gives the best switch position.  */
                 switch (name_start[4]) {
                     case 'a':
-                        if (memEQ(name_start, "alph", 4)) /* alpha */
+                        if (memSTARTS_WITHs(name_start, 5, "alph")) /* alpha */
                             class_number = ANYOF_ALPHA;
                         break;
                     case 'e':
-                        if (memEQ(name_start, "spac", 4)) /* space */
+                        if (memSTARTS_WITHs(name_start, 5, "spac")) /* space */
                             class_number = ANYOF_SPACE;
                         break;
                     case 'h':
-                        if (memEQ(name_start, "grap", 4)) /* graph */
+                        if (memSTARTS_WITHs(name_start, 5, "grap")) /* graph */
                             class_number = ANYOF_GRAPH;
                         break;
                     case 'i':
-                        if (memEQ(name_start, "asci", 4)) /* ascii */
+                        if (memSTARTS_WITHs(name_start, 5, "asci")) /* ascii */
                             class_number = ANYOF_ASCII;
                         break;
                     case 'k':
-                        if (memEQ(name_start, "blan", 4)) /* blank */
+                        if (memSTARTS_WITHs(name_start, 5, "blan")) /* blank */
                             class_number = ANYOF_BLANK;
                         break;
                     case 'l':
-                        if (memEQ(name_start, "cntr", 4)) /* cntrl */
+                        if (memSTARTS_WITHs(name_start, 5, "cntr")) /* cntrl */
                             class_number = ANYOF_CNTRL;
                         break;
                     case 'm':
-                        if (memEQ(name_start, "alnu", 4)) /* alnum */
+                        if (memSTARTS_WITHs(name_start, 5, "alnu")) /* alnum */
                             class_number = ANYOF_ALPHANUMERIC;
                         break;
                     case 'r':
-                        if (memEQ(name_start, "lowe", 4)) /* lower */
+                        if (memSTARTS_WITHs(name_start, 5, "lowe")) /* lower */
                             class_number = (FOLD) ? ANYOF_CASED : ANYOF_LOWER;
-                        else if (memEQ(name_start, "uppe", 4)) /* upper */
+                        else if (memSTARTS_WITHs(name_start, 5, "uppe")) /* upper */
                             class_number = (FOLD) ? ANYOF_CASED : ANYOF_UPPER;
                         break;
                     case 't':
-                        if (memEQ(name_start, "digi", 4)) /* digit */
+                        if (memSTARTS_WITHs(name_start, 5, "digi")) /* digit */
                             class_number = ANYOF_DIGIT;
-                        else if (memEQ(name_start, "prin", 4)) /* print */
+                        else if (memSTARTS_WITHs(name_start, 5, "prin")) /* print */
                             class_number = ANYOF_PRINT;
-                        else if (memEQ(name_start, "punc", 4)) /* punct */
+                        else if (memSTARTS_WITHs(name_start, 5, "punc")) /* punct */
                             class_number = ANYOF_PUNCT;
                         break;
                 }

@@ -3020,7 +3020,7 @@ sigaction(sig, optaction, oldaction = 0)
 	        const char *s = SvPVX_const(ST(0));
 		int i = whichsig(s);
 
-	        if (i < 0 && _memEQs(s, "SIG"))
+	        if (i < 0 && memSTARTS_WITHs(s, SvCUR(ST(0)), "SIG"))
 		    i = whichsig(s + 3);
 	        if (i < 0) {
 	            if (ckWARN(WARN_SIGNAL))
