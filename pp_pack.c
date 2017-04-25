@@ -195,7 +195,7 @@ S_mul128(pTHX_ SV *sv, U8 m)
 
   PERL_ARGS_ASSERT_MUL128;
 
-  if (! strSTARTS_WITHs(s, "0000")) {  /* need to grow sv */
+  if (! memSTARTS_WITHs(s, len, "0000")) {  /* need to grow sv */
     SV * const tmpNew = newSVpvs("0000000000");
 
     sv_catsv(tmpNew, sv);
