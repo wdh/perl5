@@ -509,6 +509,9 @@ Returns zero if non-equal, or non-zero if equal.
 #define memSTARTS_WITHs(s1, l, s2)                                          \
             (   (l) >= sizeof(s2) - 1                                       \
              && memEQ(s1, "" s2 "", sizeof(s2)-1))
+#define memFOO_STARTING_WITHs(s1, l, s2)                                    \
+            (   (l) >= sizeof(s2)                                           \
+             && memEQ(s1, "" s2 "", sizeof(s2)-1))
 #define memENDS_WITHs(s1, l, s2)                                            \
             (   (l) >= sizeof(s2) - 1                                       \
              && memEQ(s1 + (l) - (sizeof(s2) - 1), "" s2 "", sizeof(s2)-1))

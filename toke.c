@@ -2104,8 +2104,8 @@ S_force_word(pTHX_ char *start, int token, int check_keyword, int allow_pack)
 	if (check_keyword) {
 	  char *s2 = PL_tokenbuf;
 	  STRLEN len2 = len;
-	  if (allow_pack && len > 6 && strSTARTS_WITHs(s2, "CORE::"))
-	    s2 += 6, len2 -= 6;
+	  if (allow_pack && memFOO_STARTING_WITHs(s2, len, "CORE::"))
+	    s2 += sizeof("CORE::") - 1, len2 -= sizeof("CORE::") - 1;
 	  if (keyword(s2, len2, 0))
 	    return start;
 	}
@@ -5312,7 +5312,10 @@ Perl_yylex(pTHX)
 	    }
 	    if (PL_parser->in_pod) {
 		/* Incest with pod. */
-		if (*s == '=' && strSTARTS_WITHs(s, "=cut") && !isALPHA(s[4])) {
+                if (   *s == '='
+                    && memFOO_STARTING_WITHs(s, PL_bufend - s, "=cut")
+                    && !isALPHA(s[4]))
+                {
                     SvPVCLEAR(PL_linestr);
 		    PL_oldoldbufptr = PL_oldbufptr = s = PL_linestart = SvPVX(PL_linestr);
 		    PL_bufend = SvPVX(PL_linestr) + SvCUR(PL_linestr);
@@ -7932,14 +7935,17 @@ Perl_yylex(pTHX)
 		char *p = s;
                 SSize_t s_off = s - SvPVX(PL_linestr);
 
-		if ((PL_bufend - p) >= 3
-                    && strSTARTS_WITHs(p, "my") && isSPACE(*(p + 2)))
+                if (   memFOO_STARTING_WITHs(p, PL_bufend - p, "my")
+                    && isSPACE(*(p + 2)))
                 {
-		    p += 2;
+                    p += 2;
                 }
-		else if ((PL_bufend - p) >= 4
-                         && strSTARTS_WITHs(p, "our") && isSPACE(*(p + 3)))
-		    p += 3;
+                else if (   memFOO_STARTING_WITHs(p, PL_bufend - p, "our")
+                         && isSPACE(*(p + 3)))
+                {
+                    p += 3;
+                }
+
 		p = skipspace(p);
                 /* skip optional package name, as in "for my abc $x (..)" */
 	        if (isIDFIRST_lazy_if_safe(p, PL_bufend, UTF)) {

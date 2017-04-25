@@ -85,8 +85,10 @@ modify_SV_attributes(pTHX_ SV *sv, SV **retlist, SV **attrlist, int numattrs)
 		}
 		break;
 	    default:
-		if (len > 10 && _memEQs(name, "prototype(")) {
-		    SV * proto = newSVpvn(name+10,len-11);
+              {
+		if (memFOO_STARTING_WITHs(name, len, "prototype(")) {
+                    const STRLEN proto_len = sizeof("prototype(") - 1;
+		    SV * proto = newSVpvn(name + proto_len, len - proto_len - 1);
 		    HEK *const hek = CvNAME_HEK((CV *)sv);
 		    SV *subname;
 		    if (name[len-1] != ')')
@@ -107,6 +109,7 @@ modify_SV_attributes(pTHX_ SV *sv, SV **retlist, SV **attrlist, int numattrs)
 		    continue;
 		}
 		break;
+              }
 	    }
 	    break;
 	default:
