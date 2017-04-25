@@ -4148,10 +4148,10 @@ S_require_file(pTHX_ SV *sv)
                             sv_catpv(msg, " module)");
                         }
 		    }
-		    else if (len >= 2 && memEQ(name + len - 2, ".h", 3)) {
+		    else if (memENDS_WITHs(name, len, ".h")) {
 			sv_catpv(msg, " (change .h to .ph maybe?) (did you run h2ph?)");
 		    }
-		    else if (len >= 3 && memEQ(name + len - 3, ".ph", 4)) {
+		    else if (memENDS_WITHs(name, len, ".ph")) {
 			sv_catpv(msg, " (did you run h2ph?)");
 		    }
 
