@@ -235,11 +235,19 @@ are in the character.
 
 */
 
+#if 0   /* Retained in case is needed again */
 /* Anything larger than this will overflow the word if it were converted into a UV */
 #if defined(UV_IS_QUAD)
 #   define HIGHEST_REPRESENTABLE_UTF8  "\xFF\x80\x8F\xBF\xBF\xBF\xBF\xBF\xBF\xBF\xBF\xBF\xBF"
 #else
 #   define HIGHEST_REPRESENTABLE_UTF8  "\xFE\x83\xBF\xBF\xBF\xBF\xBF"
+#endif
+#endif
+
+#if defined(UV_IS_QUAD)
+#   define IV_MAX_UTF8  "\xFF\x80\x87\xBF\xBF\xBF\xBF\xBF\xBF\xBF\xBF\xBF\xBF"
+#else
+    /* Unneeded */
 #endif
 
 /* Is the representation of the Unicode code point 'cp' the same regardless of
@@ -785,6 +793,7 @@ case any call to string overloading updates the internal UTF-8 encoding flag.
 
 #define UTF8_CHECK_ONLY			0x10000
 #define _UTF8_NO_CONFIDENCE_IN_CURLEN   0x20000  /* Internal core use only */
+#define UTF8_ALLOW_ABOVE_IV_MAX_        0x40000
 
 /* For backwards source compatibility.  They do nothing, as the default now
  * includes what they used to mean.  The first one's meaning was to allow the
@@ -845,13 +854,12 @@ at C<s> and looking no further than S<C<e - 1>> are from this UTF-8 extension;
 otherwise it evaluates to 0.  If non-zero, the value gives how many bytes
 starting at C<s> comprise the code point's representation.
 
-0 is returned if the bytes are not well-formed extended UTF-8, or if they
-represent a code point that cannot fit in a UV on the current platform.  Hence
+0 is returned if the a UTF-8 malformation is detected bytes are not well-formed extended , or if they
+represent a code point that cannot fit in an IV on the current platform.  Hence
 this macro can give different results when run on a 64-bit word machine than on
 one with a 32-bit word size.
 
-Note that it is deprecated to have code points that are larger than what can
-fit in an IV on the current machine.
+XXX look for 'deprecated' in perlapi
 
 =cut
 
@@ -913,6 +921,7 @@ point's representation.
 #define UNICODE_DISALLOW_NONCHAR      0x0020
 #define UNICODE_DISALLOW_SUPER        0x0040
 #define UNICODE_DISALLOW_ABOVE_31_BIT 0x0080
+#define UNICODE_ALLOW_ABOVE_IV_MAX_   0x0100
 #define UNICODE_WARN_ILLEGAL_C9_INTERCHANGE                                   \
                                   (UNICODE_WARN_SURROGATE|UNICODE_WARN_SUPER)
 #define UNICODE_WARN_ILLEGAL_INTERCHANGE                                      \

@@ -2729,11 +2729,13 @@ Perl_magic_set(pTHX_ SV *sv, MAGIC *mg)
 #endif
 	}
 	else {
-            if (strEQ(mg->mg_ptr + 1, "NCODING") && SvOK(sv))
-                        if (PL_localizing != 2) {
-                            deprecate_fatal_in("5.28",
-                               "${^ENCODING} is no longer supported");
-                        }
+            if (   strEQ(mg->mg_ptr + 1, "NCODING")
+                && SvOK(sv)
+                && PL_localizing != 2)
+            {
+                /* XXX perldiag */
+                Perl_croak(aTHX_ "${^ENCODING} is no longer supported");
+            }
         }
 	break;
     case '\006':	/* ^F */

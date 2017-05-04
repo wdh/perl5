@@ -13,9 +13,6 @@ BEGIN {
 
 $|=1;
 
-no warnings 'deprecated'; # Some of the below are above IV_MAX on 32 bit
-                          # machines, and that is tested elsewhere
-
 use XS::APItest;
 use Data::Dumper;
 
@@ -415,6 +412,32 @@ my @tests = (
         1,
         nonportable_regex(0x80000000)
     ],
+    [ "overflow above IV_MAX with warnings/disallow for more than 31 bits",
+        # XXX This tests the interaction of WARN_ABOVE_31_BIT/DISALLOW_ABOVE_31_BIT
+        # with overflow.  The overflow malformation is never allowed, so
+        # preventing it takes precedence if the ABOVE_31_BIT options would
+        # otherwise allow in an overflowing value.  The ASCII code points (1
+        # for 32-bits; 1 for 64) were chosen because the old overflow
+        # detection algorithm did not catch them; this means this test also
+        # checks for that fix.  The EBCDIC are arbitrary overflowing ones
+        # since we have no reports of failures with it.
+       (($::is64bit)
+        ? ((isASCII)
+           ?    "\xff\x80\x8f\xbf\xbf\xbf\xbf\xbf\xbf\xbf\xbf\xbf\xbf"
+           : I8_to_native(
+                "\xff\xaf\xbf\xbf\xbf\xbf\xbf\xbf\xbf\xbf\xbf\xbf\xbf\xbf"))
+        : ((isASCII)
+           ?    "\xfd\xbf\xbf\xbf\xbf\xbf"
+           : I8_to_native(
+                "\xff\xa0\xa0\xa0\xa0\xa0\xa0\xa1\xbf\xbf\xbf\xbf\xbf\xbf"))),
+        $::UTF8_WARN_ABOVE_31_BIT,
+        $::UTF8_DISALLOW_ABOVE_31_BIT,
+        $::UTF8_GOT_ABOVE_31_BIT,
+        'utf8', 0,
+        (! isASCII || $::is64bit) ? $::max_bytes : 7,
+        (isASCII || $::is64bit) ? 2 : 8,
+        qr/overflows/
+    ],
     [ "overflow with warnings/disallow for more than 31 bits",
         # This tests the interaction of WARN_ABOVE_31_BIT/DISALLOW_ABOVE_31_BIT
         # with overflow.  The overflow malformation is never allowed, so
@@ -730,6 +753,7 @@ foreach my $test (@tests) {
                                  = $::max_bytes - ($this_expected_len
                                                - $this_needed_to_discern_len);
                             $this_expected_len = $::max_bytes;
+                            #print STDERR __LINE__, ": ", sprintf("%x", $allowed_uv), display_bytes($this_bytes), "\n";
                             push @expected_errors, $::UTF8_GOT_LONG;
                         }
                         if ($malformations_name =~ /short/) {
@@ -889,14 +913,10 @@ foreach my $test (@tests) {
                         }
                     }
                     else {
-                    no_warnings_expected:
-                        unless (is(scalar @warnings, 0,
-                                "$this_name: Got no warnings"))
-                        {
-                            diag $call;
-                            output_warnings(@warnings);
-                        }
+                      goto no_warnings_expected;
                     }
+                  
+                  continue_after_no_warnings_expected:
 
                     # Check CHECK_ONLY results when the input is
                     # disallowed.  Do this when actually disallowed,
@@ -1047,6 +1067,17 @@ foreach my $test (@tests) {
                                                 if scalar @warnings;
                         }
                     }
+
+                    next;
+
+                no_warnings_expected:
+                    unless (is(scalar @warnings, 0,
+                            "$this_name: Got no warnings"))
+                    {
+                        diag $call;
+                        output_warnings(@warnings);
+                    }
+                    goto continue_after_no_warnings_expected;
                 }
               }
             }

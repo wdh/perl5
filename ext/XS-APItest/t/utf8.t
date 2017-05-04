@@ -13,9 +13,6 @@ BEGIN {
 
 $|=1;
 
-no warnings 'deprecated'; # Some of the below are above IV_MAX on 32 bit
-                          # machines, and that is tested elsewhere
-
 use XS::APItest;
 
 my $pound_sign = chr utf8::unicode_to_native(163);
@@ -33,7 +30,8 @@ my $look_for_everything_utf8n_to
 			| $::UTF8_DISALLOW_SUPER
 			| $::UTF8_WARN_SUPER
 			| $::UTF8_DISALLOW_ABOVE_31_BIT
-			| $::UTF8_WARN_ABOVE_31_BIT;
+			| $::UTF8_WARN_ABOVE_31_BIT
+			| $::UTF8_ALLOW_ABOVE_IV_MAX_;
 my $look_for_everything_uvchr_to
                         = $::UNICODE_DISALLOW_SURROGATE
 			| $::UNICODE_WARN_SURROGATE
@@ -42,7 +40,8 @@ my $look_for_everything_uvchr_to
 			| $::UNICODE_DISALLOW_SUPER
 			| $::UNICODE_WARN_SUPER
 			| $::UNICODE_DISALLOW_ABOVE_31_BIT
-			| $::UNICODE_WARN_ABOVE_31_BIT;
+			| $::UNICODE_WARN_ABOVE_31_BIT
+			| $::UNICODE_ALLOW_ABOVE_IV_MAX_;
 
 foreach ([0, '', '', 'empty'],
 	 [0, 'N', 'N', '1 char'],
@@ -72,9 +71,9 @@ foreach ([0, '', '', 'empty'],
 # are adjacent to problematic code points, so we want to make sure they aren't
 # considered problematic.
 my %code_points = (
-    0x0100     => (isASCII) ? "\xc4\x80" : I8_to_native("\xc8\xa0"),
-    0x0400 - 1 => (isASCII) ? "\xcf\xbf" : I8_to_native("\xdf\xbf"),
-    0x0400     => (isASCII) ? "\xd0\x80" : I8_to_native("\xe1\xa0\xa0"),
+    0x0100     => (isASCII) ? "\xc4\x80"     : I8_to_native("\xc8\xa0"),
+    0x0400 - 1 => (isASCII) ? "\xcf\xbf"     : I8_to_native("\xdf\xbf"),
+    0x0400     => (isASCII) ? "\xd0\x80"     : I8_to_native("\xe1\xa0\xa0"),
     0x0800 - 1 => (isASCII) ? "\xdf\xbf"     : I8_to_native("\xe1\xbf\xbf"),
     0x0800     => (isASCII) ? "\xe0\xa0\x80" : I8_to_native("\xe2\xa0\xa0"),
     0x4000 - 1 => (isASCII) ? "\xe3\xbf\xbf" : I8_to_native("\xef\xbf\xbf"),
@@ -95,11 +94,10 @@ my %code_points = (
     0xD7FF     => (isASCII) ? "\xed\x9f\xbf" : I8_to_native("\xf1\xb5\xbf\xbf"),
     0xD800     => (isASCII) ? "\xed\xa0\x80" : I8_to_native("\xf1\xb6\xa0\xa0"),
     0xDC00     => (isASCII) ? "\xed\xb0\x80" : I8_to_native("\xf1\xb7\xa0\xa0"),
-    0xDFFF     => (isASCII) ? "\xee\x80\x80" : I8_to_native("\xf1\xb8\xa0\xa0"),
     0xDFFF     => (isASCII) ? "\xed\xbf\xbf" : I8_to_native("\xf1\xb7\xbf\xbf"),
     0xE000     => (isASCII) ? "\xee\x80\x80" : I8_to_native("\xf1\xb8\xa0\xa0"),
 
-    # Include the 32 contiguous non characters, and surrounding code points
+    # Include the 32 contiguous non characters, and adjacent code points
     0xFDCF     => (isASCII) ? "\xef\xb7\x8f" : I8_to_native("\xf1\xbf\xae\xaf"),
     0xFDD0     => (isASCII) ? "\xef\xb7\x90" : I8_to_native("\xf1\xbf\xae\xb0"),
     0xFDD1     => (isASCII) ? "\xef\xb7\x91" : I8_to_native("\xf1\xbf\xae\xb1"),
@@ -406,6 +404,10 @@ if ($::is64bit) {
      = (isASCII)
      ?              "\xff\x80\x80\x80\x80\x80\x81\x80\x80\x80\x80\x80\x80"
      : I8_to_native("\xff\xa0\xa0\xa0\xa0\xa0\xa2\xa0\xa0\xa0\xa0\xa0\xa0\xa0");
+    $code_points{0x7FFFFFFFFFFFFFFF}
+     = (isASCII)
+     ?              "\xff\x80\x87\xbf\xbf\xbf\xbf\xbf\xbf\xbf\xbf\xbf\xbf"
+     : I8_to_native("\xff\xa7\xbf\xbf\xbf\xbf\xbf\xbf\xbf\xbf\xbf\xbf\xbf\xbf");
     $code_points{0xFFFFFFFFFFFFFFFF}
      = (isASCII)
      ?              "\xff\x80\x8f\xbf\xbf\xbf\xbf\xbf\xbf\xbf\xbf\xbf\xbf"
@@ -526,6 +528,8 @@ for my $u (sort { utf8::unicode_to_native($a) <=> utf8::unicode_to_native($b) }
                    "Verify UVCHR_SKIP($hex_n) is $uvchr_skip_should_be");
     is(test_UVCHR_IS_INVARIANT($n), $offskip_should_be == 1,
        "Verify UVCHR_IS_INVARIANT($hex_n) is $display_invariant");
+
+    next if $n > ~0 >> 1;   # IV_MAX, we hope.
 
     my $n_chr = chr $n;
     utf8::upgrade $n_chr;

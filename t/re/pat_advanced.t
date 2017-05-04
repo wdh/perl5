@@ -2336,49 +2336,6 @@ EOF
         unlike("s\N{U+DF}", qr/^\x{00DF}/i, "\"s\\N{U+DF}\", qr/^\\x{00DF}/i");
     }
 
-    # User-defined Unicode properties to match above-Unicode code points
-    sub Is_32_Bit_Super { return "110000\tFFFFFFFF\n" }
-    sub Is_Portable_Super { return '!utf8::Any' }   # Matches beyond 32 bits
-
-    {   # Assertion was failing on on 64-bit platforms; just didn't work on 32.
-        no warnings qw(non_unicode portable);
-        no warnings 'deprecated'; # These are above IV_MAX
-        use Config;
-
-        # We use 'ok' instead of 'like' because the warnings are lexically
-        # scoped, and want to turn them off, so have to do the match in this
-        # scope.
-        if ($Config{uvsize} < 8) {
-            ok(chr(0xFFFF_FFFE) =~ /\p{Is_32_Bit_Super}/,
-                            "chr(0xFFFF_FFFE) can match a Unicode property");
-            ok(chr(0xFFFF_FFFF) =~ /\p{Is_32_Bit_Super}/,
-                            "chr(0xFFFF_FFFF) can match a Unicode property");
-            my $p = qr/^[\x{FFFF_FFFF}]$/;
-            ok(chr(0xFFFF_FFFF) =~ $p,
-                    "chr(0xFFFF_FFFF) can match itself in a [class]");
-            ok(chr(0xFFFF_FFFF) =~ $p, # Tests any caching
-                    "chr(0xFFFF_FFFF) can match itself in a [class] subsequently");
-        }
-        else {
-            no warnings 'overflow';
-            ok(chr(0xFFFF_FFFF_FFFF_FFFE) =~ qr/\p{Is_Portable_Super}/,
-                    "chr(0xFFFF_FFFF_FFFF_FFFE) can match a Unicode property");
-            ok(chr(0xFFFF_FFFF_FFFF_FFFF) =~ qr/^\p{Is_Portable_Super}$/,
-                    "chr(0xFFFF_FFFF_FFFF_FFFF) can match a Unicode property");
-
-            my $p = qr/^[\x{FFFF_FFFF_FFFF_FFFF}]$/;
-            ok(chr(0xFFFF_FFFF_FFFF_FFFF) =~ $p,
-                    "chr(0xFFFF_FFFF_FFFF_FFFF) can match itself in a [class]");
-            ok(chr(0xFFFF_FFFF_FFFF_FFFF) =~ $p, # Tests any caching
-                    "chr(0xFFFF_FFFF_FFFF_FFFF) can match itself in a [class] subsequently");
-
-            # This test is because something was declared as 32 bits, but
-            # should have been cast to 64; only a problem where
-            # sizeof(STRLEN) != sizeof(UV)
-            ok(chr(0xFFFF_FFFF_FFFF_FFFE) !~ qr/\p{Is_32_Bit_Super}/, "chr(0xFFFF_FFFF_FFFF_FFFE) shouldn't match a range ending in 0xFFFF_FFFF");
-        }
-    }
-
     { # [perl #112530], the code below caused a panic
         sub InFoo { "a\tb\n9\ta\n" }
         like(chr(0xA), qr/\p{InFoo}/,
@@ -2418,6 +2375,7 @@ EOF
     SKIP:
     {   # [perl #125826] buffer overflow in TRIE_STORE_REVCHAR
         # (during compilation, so use a fresh perl)
+        use Config;
         $Config{uvsize} == 8
 	  or skip("need large code-points for this test", 1);
 

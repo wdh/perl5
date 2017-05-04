@@ -100,15 +100,9 @@ use warnings 'uninitialized';
 $ENV{FOO} = undef; # should not warn
 EXPECT
 ########
-${^ENCODING} = 42;
-{ local ${^ENCODING}; }
 ${^ENCODING} = undef;
-{ local ${^ENCODING} = 37; }
-no warnings 'deprecated';
-${^ENCODING} = 42;
 { local ${^ENCODING}; }
-${^ENCODING} = undef;
-{ local ${^ENCODING} = 37; }
+${^ENCODING} = 42;
 EXPECT
-${^ENCODING} is no longer supported. Its use will be fatal in Perl 5.28 at - line 1.
-${^ENCODING} is no longer supported. Its use will be fatal in Perl 5.28 at - line 4.
+OPTION fatal
+${^ENCODING} is no longer supported at - line 3.

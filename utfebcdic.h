@@ -268,11 +268,20 @@ explicitly forbidden, and the shortest possible encoding should always be used
  * for more */
 #define QUESTION_MARK_CTRL   LATIN1_TO_NATIVE(0x9F)
 
+#if 0   /* Retained in case is needed again */
 /* Any I8 string larger than this will overflow the word if it were converted into a UV */
 #if defined(UV_IS_QUAD)
 #   define HIGHEST_REPRESENTABLE_UTF8  "\xFF\xAF\xBF\xBF\xBF\xBF\xBF\xBF\xBF\xBF\xBF\xBF\xBF\xBF"
 #else
 #   define HIGHEST_REPRESENTABLE_UTF8  "\xFF\xA0\xA0\xA0\xA0\xA0\xA0\xA3\xBF\xBF\xBF\xBF\xBF\xBF"
+#endif
+#endif
+
+#if defined(UV_IS_QUAD) 
+    /* Actually this is I8, not UTF8. */
+#   define IV_MAX_UTF8  "\xFF\xAF\xBF\xBF\xBF\xBF\xBF\xBF\xBF\xBF\xBF\xBF\xBF\xBF"
+#else
+    /* Unneeded */
 #endif
 
 /* Helper macros for isUTF8_CHAR_foo, so use those instead of this.  These were

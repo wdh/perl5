@@ -129,8 +129,8 @@ is(rindex($a, "foo",    ), 0);
     is (rindex($text, $search_octets), -1);
 }
 
-{
-    no warnings 'deprecated'; # These are above IV_MAX on 32 bit machines
+SKIP: {
+    skip("Not a 64-bit machine", 3) if length sprintf("%x", ~0) <= 8;
     my $a = eval q{"\x{80000000}"};
     my $s = $a.'defxyz';
     is(index($s, 'def'), 1, "0x80000000 is a single character");

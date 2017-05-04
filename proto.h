@@ -5836,12 +5836,10 @@ PERL_STATIC_INLINE bool	S_is_utf8_common_with_len(pTHX_ const U8 *const p, const
 	assert(p); assert(e); assert(swash); assert(swashname)
 #endif
 
-#ifndef PERL_NO_INLINE_FUNCTIONS
-PERL_STATIC_INLINE bool	S_is_utf8_cp_above_31_bits(const U8 * const s, const U8 * const e)
+STATIC bool	S_is_utf8_cp_above_31_bits(const U8 * const s, const U8 * const e, const bool assume_not_overlong)
 			__attribute__warn_unused_result__;
 #define PERL_ARGS_ASSERT_IS_UTF8_CP_ABOVE_31_BITS	\
 	assert(s); assert(e)
-#endif
 
 #ifndef PERL_NO_INLINE_FUNCTIONS
 PERL_STATIC_INLINE bool	S_is_utf8_overlong_given_start_byte_ok(const U8 * const s, const STRLEN len)

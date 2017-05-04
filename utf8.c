@@ -37,9 +37,9 @@ static const char malformed_text[] = "Malformed UTF-8 character";
 static const char unees[] =
                         "Malformed UTF-8 character (unexpected end of string)";
 static const char cp_above_legal_max[] =
- "Use of code point 0x%" UVXf " is deprecated; the permissible max is 0x%" UVXf ". This will be fatal in Perl 5.28";
+ "Use of code point 0x%" UVXf " is illegal; the permissible max is 0x%" UVXf;
 
-#define MAX_NON_DEPRECATED_CP ((UV) (IV_MAX))
+#define MAX_LEGAL_CP ((UV) (IV_MAX))
 
 /*
 =head1 Unicode Support
@@ -198,11 +198,10 @@ Perl_uvoffuni_to_utf8_flags(pTHX_ U8 *d, UV uv, const UV flags)
      * performance hit on these high EBCDIC code points. */
 
     if (UNLIKELY(UNICODE_IS_SUPER(uv))) {
-        if (   UNLIKELY(uv > MAX_NON_DEPRECATED_CP)
-            && ckWARN_d(WARN_DEPRECATED))
+        if (   UNLIKELY(uv > MAX_LEGAL_CP)
+            && ! (flags & UNICODE_ALLOW_ABOVE_IV_MAX_))
         {
-            Perl_warner(aTHX_ packWARN(WARN_DEPRECATED),
-                        cp_above_legal_max, uv, MAX_NON_DEPRECATED_CP);
+            Perl_croak(aTHX_ cp_above_legal_max, uv, MAX_LEGAL_CP);
         }
         if (   (flags & UNICODE_WARN_SUPER)
             || (   UNICODE_IS_ABOVE_31_BIT(uv)
@@ -391,8 +390,10 @@ Perl_uvchr_to_utf8_flags(pTHX_ U8 *d, UV uv, UV flags)
     return uvchr_to_utf8_flags(d, uv, flags);
 }
 
-PERL_STATIC_INLINE bool
-S_is_utf8_cp_above_31_bits(const U8 * const s, const U8 * const e)
+STATIC bool
+S_is_utf8_cp_above_31_bits(const U8 * const s,
+                           const U8 * const e,
+                           const bool assume_not_overlong)
 {
     /* Returns TRUE if the first code point represented by the Perl-extended-
      * UTF-8-encoded string starting at 's', and looking no further than 'e -
@@ -402,13 +403,14 @@ S_is_utf8_cp_above_31_bits(const U8 * const s, const U8 * const e)
      * the ones necessary to represent a full character.  That is, they may be
      * the intial bytes of the representation of a code point, but possibly
      * the final ones necessary for the complete representation may be beyond
-     * 'e - 1'.
+     * 'e - 1'.  If the sequence is incomplete, the function returns FALSE if
+     * there is any well-formed UTF-8 byte sequence that can complete it in
+     * such a way that a code point < 2**31 is produced; otherwise it returns
+     * TRUE.
      *
-     * The function assumes that the sequence is well-formed UTF-8 as far as it
-     * goes, and is for a UTF-8 variant code point.  If the sequence is
-     * incomplete, the function returns FALSE if there is any well-formed
-     * UTF-8 byte sequence that can complete it in such a way that a code point
-     * < 2**31 is produced; otherwise it returns TRUE.
+     * The function also handles the case where the input is overlong.  It will
+     * return TRUE if and only if the overlong sequence would evaluate to
+     * something above 31 bits.
      *
      * Getting this exactly right is slightly tricky, and has to be done in
      * several places in this file, so is centralized here.  It is based on the
@@ -433,63 +435,86 @@ S_is_utf8_cp_above_31_bits(const U8 * const s, const U8 * const e)
 
     /* [0] is start byte  [1] [2] [3] [4] [5] [6] [7] */
     const U8 prefix[] = "\x41\x41\x41\x41\x41\x41\x42";
+
+#else
+
+    /* [0] is start byte  [1] [2] [3] [4] [5] [6] [7] [8] */
+    const U8 prefix[] = "\xff\x80\x80\x80\x80\x80\x80\x81";
+
+#endif
+
     const STRLEN prefix_len = sizeof(prefix) - 1;
     const STRLEN len = e - s;
     const STRLEN cmp_len = MIN(prefix_len, len - 1);
 
-#else
-
-    PERL_UNUSED_ARG(e);
-
-#endif
-
     PERL_ARGS_ASSERT_IS_UTF8_CP_ABOVE_31_BITS;
 
-    assert(! UTF8_IS_INVARIANT(*s));
+    assert(! UTF8_IS_INVARIANT(*s) && e > s);
 
-#ifndef EBCDIC
-
-    /* Technically, a start byte of FE can be for a code point that fits into
-     * 31 bytes, but not for well-formed UTF-8: doing that requires an overlong
-     * malformation. */
-    return (*s >= 0xFE);
-
-#else
+#ifdef EBCDIC
 
     /* On the EBCDIC code pages we handle, only 0xFE can mean a 32-bit or
      * larger code point (0xFF is an invariant).  For 0xFE, we need at least 2
      * bytes, and maybe up through 8 bytes, to be sure if the value is above 31
-     * bits. */
-    if (*s != 0xFE || len == 1) {
+     * bits.  We don't have to worry about overlongs, as the highest overlong
+     * sequence is well below what we're dealing with here */
+
+    PERL_UNUSED_ARG(assume_not_overlong);
+
+    if (LIKELY(*s != 0xFE) || len == 1) {
         return FALSE;
     }
 
-    /* Note that in UTF-EBCDIC, the two lowest possible continuation bytes are
-     * \x41 and \x42. */
-    return cBOOL(memGT(s + 1, prefix, cmp_len));
+#else
+
+    /* FE and FF are the only start bytes that can evaluate to needing more
+     * than 31 bits.  And for those we need more than one byte to know, because
+     * the sequence could be overlong */
+    if (LIKELY(*s < 0xFE)) {
+        return FALSE;
+    }
+
+    if (assume_not_overlong) {
+        return TRUE;
+    }
+
+    if (len == 1) {
+        return FALSE;
+    }
+
+    /* What we have left are FE and FF, which are both valid start bytes.  If
+     * the sequence isn't overlong, these both indicate above 31 bits.  (We
+     * don't need the full generality of the called function, but for these
+     * huge code points, speed shouldn't be a consideration, and the compiler
+     * does have enough information, since it's static to this file, to
+     * optimize to just the needed parts.) */
+    if (LIKELY(! is_utf8_overlong_given_start_byte_ok(s, len))) {
+        return TRUE;
+    }
+
+    /* An overlong sequence starting with FE is below 31 bits, as the first
+     * non-overlong code point starting with FE is 2**31 */
+    if (*s == 0xFE) {
+        return FALSE;
+    }
 
 #endif
+
+    /* Note that in UTF-EBCDIC, the two lowest possible continuation bytes are
+     * \x41 and \x42; for UTF-8, it's 0x80 and 0x81 */
+    return cBOOL(memGT(s + 1, prefix, cmp_len));
 
 }
 
 PERL_STATIC_INLINE bool
 S_does_utf8_overflow(const U8 * const s, const U8 * e)
 {
-    const U8 *x;
-    const U8 * y = (const U8 *) HIGHEST_REPRESENTABLE_UTF8;
-
-#if ! defined(UV_IS_QUAD) && ! defined(EBCDIC)
-
-    const STRLEN len = e - s;
-
-#endif
-
-    /* Returns a boolean as to if this UTF-8 string would overflow a UV on this
-     * platform, that is if it represents a code point larger than the highest
-     * representable code point.  (For ASCII platforms, we could use memcmp()
-     * because we don't have to convert each byte to I8, but it's very rare
-     * input indeed that would approach overflow, so the loop below will likely
-     * only get executed once.
+    /* Returns a boolean as to if this UTF-8 string would overflow an IV on
+     * this platform, that is if it represents a code point larger than the
+     * highest representable code point.  (For ASCII platforms, we could use
+     * memcmp() because we don't have to convert each byte to I8, but it's very
+     * rare input indeed that would approach overflow, so the loop below will
+     * likely only get executed once.
      *
      * 'e' must not be beyond a full character.  If it is less than a full
      * character, the function returns FALSE if there is any input beyond 'e'
@@ -497,6 +522,48 @@ S_does_utf8_overflow(const U8 * const s, const U8 * e)
 
     PERL_ARGS_ASSERT_DOES_UTF8_OVERFLOW;
     assert(s <= e && s + UTF8SKIP(s) >= e);
+
+#if ! defined(UV_IS_QUAD)
+
+    return is_utf8_cp_above_31_bits(s, e, FALSE /* consider overlongs */);
+
+#else
+
+    {
+        const U8 *x;
+        const U8 * y = (const U8 *) IV_MAX_UTF8;
+
+        for (x = s; x < e; x++, y++) {
+
+            /* If this byte is larger than the corresponding IV_MAX UTF-8 byte,
+             * it overflows */
+            if (UNLIKELY(NATIVE_UTF8_TO_I8(*x) > *y)) {
+                return TRUE;
+            }
+
+            /* If not the same as this byte, it must be smaller, doesn't
+             * overflow */
+            if (LIKELY(NATIVE_UTF8_TO_I8(*x) != *y)) {
+                return FALSE;
+            }
+        }
+    }
+
+    /* Got to the end and all bytes are the same.  If the input is a whole
+     * character, it doesn't overflow.  And if it is a partial character,
+     * there's not enough information to tell, so assume doesn't overflow */
+    return FALSE;
+
+#endif
+
+#if 0   /* Code for handling above IV_MAX; may want to use this again if Perl
+           starts using negative code points internally */
+
+#if ! defined(UV_IS_QUAD) && ! defined(EBCDIC)
+
+    const STRLEN len = e - s;
+
+#endif
 
 #if ! defined(UV_IS_QUAD) && ! defined(EBCDIC)
 
@@ -511,17 +578,22 @@ S_does_utf8_overflow(const U8 * const s, const U8 * e)
 
 #endif
 
-    for (x = s; x < e; x++, y++) {
+    {
+        const U8 *x;
+        const U8 * y = (const U8 *) HIGHEST_REPRESENTABLE_UTF8;
 
-        /* If this byte is larger than the corresponding highest UTF-8 byte, it
-         * overflows */
-        if (UNLIKELY(NATIVE_UTF8_TO_I8(*x) > *y)) {
-            return TRUE;
-        }
+        for (x = s; x < e; x++, y++) {
 
-        /* If not the same as this byte, it must be smaller, doesn't overflow */
-        if (LIKELY(NATIVE_UTF8_TO_I8(*x) != *y)) {
-            return FALSE;
+            /* If this byte is larger than the corresponding highest UTF-8 byte, it
+            * overflows */
+            if (UNLIKELY(NATIVE_UTF8_TO_I8(*x) > *y)) {
+                return TRUE;
+            }
+
+            /* If not the same as this byte, it must be smaller, doesn't overflow */
+            if (LIKELY(NATIVE_UTF8_TO_I8(*x) != *y)) {
+                return FALSE;
+            }
         }
     }
 
@@ -529,6 +601,9 @@ S_does_utf8_overflow(const U8 * const s, const U8 * e)
      * character, it doesn't overflow.  And if it is a partial character,
      * there's not enough information to tell, so assume doesn't overflow */
     return FALSE;
+
+#endif  /* #if 0 */
+
 }
 
 PERL_STATIC_INLINE bool
@@ -680,6 +755,11 @@ Perl__is_utf8_char_helper(const U8 * const s, const U8 * e, const U32 flags)
          *   U+DFFF: \xED\xBF\xBF      \xF1\xB7\xBF\xBF      Final surrogate
          * U+110000: \xF4\x90\x80\x80  \xF9\xA2\xA0\xA0\xA0  First above Unicode
          *
+         * Some of the tests here assume that the UTF-8 is well-formed.  In
+         * particular they might return that an overlong is in a particular
+         * class that it actually isn't.  But this is not a problem, as it
+         * the function then returns failure here in all such cases, and would
+         * fail anyway as an overlong later in the function.
          */
 
 #ifdef EBCDIC   /* On EBCDIC, these are actually I8 bytes */
@@ -702,7 +782,7 @@ Perl__is_utf8_char_helper(const U8 * const s, const U8 * e, const U32 flags)
         }
 
         if (   (flags & UTF8_DISALLOW_ABOVE_31_BIT)
-            &&  UNLIKELY(is_utf8_cp_above_31_bits(s, e)))
+            &&  UNLIKELY(is_utf8_cp_above_31_bits(s, e, TRUE /* Don't allow for overlongs */)))
         {
             return 0;           /* Above 31 bits */
         }
@@ -1269,14 +1349,7 @@ Perl_utf8n_to_uvchr_error(pTHX_ const U8 *s,
 	              |UTF8_WARN_NONCHAR
                       |UTF8_WARN_SURROGATE
                       |UTF8_WARN_SUPER
-                      |UTF8_WARN_ABOVE_31_BIT))
-                   /* In case of a malformation, 'uv' is not valid, and has
-                    * been changed to something in the Unicode range.
-                    * Currently we don't output a deprecation message if there
-                    * is already a malformation, so we don't have to special
-                    * case the test immediately below */
-            || (   UNLIKELY(uv > MAX_NON_DEPRECATED_CP)
-                && ckWARN_d(WARN_DEPRECATED))))
+                      |UTF8_WARN_ABOVE_31_BIT))))
     {
         /* If there were no malformations, or the only malformation is an
          * overlong, 'uv' is valid */
@@ -1384,11 +1457,9 @@ Perl_utf8n_to_uvchr_error(pTHX_ const U8 *s,
                 }
 
 
-                /* Likewise, warn if any say to, plus if deprecation warnings
-                 * are on, because this code point is above IV_MAX */
-                if (  ckWARN_d(WARN_DEPRECATED)
-                    || ! (flags & UTF8_ALLOW_OVERFLOW)
-                    ||   (flags & (UTF8_WARN_SUPER|UTF8_WARN_ABOVE_31_BIT)))
+                /* Likewise, warn if any say to */
+                if (  ! (flags & UTF8_ALLOW_OVERFLOW)
+                    ||  (flags & (UTF8_WARN_SUPER|UTF8_WARN_ABOVE_31_BIT)))
                 {
 
                     /* The warnings code explicitly says it doesn't handle the
@@ -1613,7 +1684,8 @@ Perl_utf8n_to_uvchr_error(pTHX_ const U8 *s,
                     && (   (   UNLIKELY(orig_problems & UTF8_GOT_TOO_SHORT)
                             && UNLIKELY(is_utf8_cp_above_31_bits(
                                                                 adjusted_s0,
-                                                                adjusted_send)))
+                                                                adjusted_send,
+                                                                FALSE /* Consider overlongs */ )))
                         || (   LIKELY(! (orig_problems & UTF8_GOT_TOO_SHORT))
                             && UNLIKELY(UNICODE_IS_ABOVE_31_BIT(uv)))))
                 {
@@ -1654,20 +1726,6 @@ Perl_utf8n_to_uvchr_error(pTHX_ const U8 *s,
                     disallowed = TRUE;
                 }
 
-                /* The deprecated warning overrides any non-deprecated one.  If
-                 * there are other problems, a deprecation message is not
-                 * really helpful, so don't bother to raise it in that case.
-                 * This also keeps the code from having to handle the case
-                 * where 'uv' is not valid. */
-                if (   ! (orig_problems
-                                    & (UTF8_GOT_TOO_SHORT|UTF8_GOT_OVERFLOW))
-                    && UNLIKELY(uv > MAX_NON_DEPRECATED_CP)
-                    && ckWARN_d(WARN_DEPRECATED))
-                {
-                    message = Perl_form(aTHX_ cp_above_legal_max,
-                                              uv, MAX_NON_DEPRECATED_CP);
-                    pack_warn = packWARN(WARN_DEPRECATED);
-                }
             }
             else if (possible_problems & UTF8_GOT_NONCHAR) {
                 possible_problems &= ~UTF8_GOT_NONCHAR;
@@ -2865,11 +2923,8 @@ S__to_utf8_case(pTHX_ const UV uv1, const U8 *p, U8* ustrp, STRLEN *lenp,
                 }
 
                 if (UNLIKELY(UNICODE_IS_SUPER(uv1))) {
-                    if (   UNLIKELY(uv1 > MAX_NON_DEPRECATED_CP)
-                        && ckWARN_d(WARN_DEPRECATED))
-                    {
-                        Perl_warner(aTHX_ packWARN(WARN_DEPRECATED),
-                                cp_above_legal_max, uv1, MAX_NON_DEPRECATED_CP);
+                    if (UNLIKELY(uv1 > MAX_LEGAL_CP)) {
+                        Perl_croak(aTHX_ cp_above_legal_max, uv1, MAX_LEGAL_CP);
                     }
                     if (ckWARN_d(WARN_NON_UNICODE)) {
                         const char* desc = (PL_op) ? OP_DESC(PL_op) : normal;
@@ -2884,7 +2939,7 @@ S__to_utf8_case(pTHX_ const UV uv1, const U8 *p, U8* ustrp, STRLEN *lenp,
                 {
 
                     /* As of this writing, this means we avoid swash creation
-                     * for anything beyond low Plane 1 */
+                     * for anything beyond high Plane 1 */
                     goto cases_to_self;
                 }
 #endif
@@ -4939,12 +4994,9 @@ bool
 Perl_check_utf8_print(pTHX_ const U8* s, const STRLEN len)
 {
     /* May change: warns if surrogates, non-character code points, or
-     * non-Unicode code points are in s which has length len bytes.  Returns
-     * TRUE if none found; FALSE otherwise.  The only other validity check is
-     * to make sure that this won't exceed the string's length.
-     *
-     * Code points above the platform's C<IV_MAX> will raise a deprecation
-     * warning, unless those are turned off.  */
+     * non-Unicode code points are in 's' which has length 'len' bytes.
+     * Returns TRUE if none found; FALSE otherwise.  The only other validity
+     * check is to make sure that this won't exceed the string's length. */
 
     const U8* const e = s + len;
     bool ok = TRUE;
@@ -4960,22 +5012,8 @@ Perl_check_utf8_print(pTHX_ const U8* s, const STRLEN len)
 	if (UNLIKELY(isUTF8_POSSIBLY_PROBLEMATIC(*s))) {
 	    if (UNLIKELY(UTF8_IS_SUPER(s, e))) {
                 if (   ckWARN_d(WARN_NON_UNICODE)
-                    || (   ckWARN_d(WARN_DEPRECATED)
-#ifndef UV_IS_QUAD
-                        && UNLIKELY(is_utf8_cp_above_31_bits(s, e))
-#else   /* Below is 64-bit words */
-                        /* 2**63 and up meet these conditions provided we have
-                         * a 64-bit word. */
-#   ifdef EBCDIC
-                        && *s == 0xFE
-                        && NATIVE_UTF8_TO_I8(s[1]) >= 0xA8
-#   else
-                        && *s == 0xFF
-                           /* s[1] being above 0x80 overflows */
-                        && s[2] >= 0x88
-#   endif
-#endif
-                )) {
+                    || UNLIKELY(does_utf8_overflow(s, s + len)))
+                {
                     /* A side effect of this function will be to warn */
                     (void) utf8n_to_uvchr(s, e - s, NULL, UTF8_WARN_SUPER);
                     ok = FALSE;
